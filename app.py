@@ -1,170 +1,320 @@
-import streamlit as st
+import random
+import re
 import datetime
+import streamlit as st
 
-# --- 1. Настройка страницы и заголовок ---
+# ==========================================
+# 1. КОНФИГУРАЦИЯ СТРАНИЦЫ
+# ==========================================
 st.set_page_config(
-    page_title="Генератор рекламы | Центр-инвест",
-    page_icon="🎯",
-    layout="centered"
+    page_title="ИИ-Копирайтер | Центр-инвест",
+    page_icon="🚀",
+    layout="wide"
 )
 
-st.title("🎯 Генератор рекламного контента (Центр-инвест)")
-st.caption("Модуль ввода: укажите тему акции или продукта банка, выберите рекламный формат и нажмите кнопку генерации.")
-
-# --- Вспомогательная функция генерации рекламного контента ---
-# Внимание: сюда Разработчик модуля генерации может подключить вызов модели Центр-инвест!
-def generate_advertising_text(prompt: str, ad_format: str) -> str:
-    """
-    Генерация рекламного текста:
-    - Интеграция с моделью «Центр-инвест» (через API-ключ в st.secrets или модуль генерации).
-    - Автономный демо-генератор целевых рекламных текстов банка Центр-инвест.
-    """
-    # 1. Точка интеграции для разработчика модуля генерации (модель Центр-инвест)
-    if "CENTRINVEST_API_KEY" in st.secrets:
-        try:
-            # Здесь разработчик модуля генерации подключает вызов модели Центр-инвест
-            api_key = st.secrets["CENTRINVEST_API_KEY"]
-            # api_url = st.secrets.get("CENTRINVEST_API_URL", "https://api.centrinvest.ru/llm")
-            # response = call_centrinvest_model(prompt, ad_format, api_key)
-            # return response
-            pass
-        except Exception as e:
-            st.warning(f"Ошибка вызова модели Центр-инвест: {e}. Переключение на демонстрационный режим.")
-
-    # 2. Автономный генератор рекламных текстов под форматы банка Центр-инвест
-    now = datetime.datetime.now().strftime("%H:%M")
-    
-    if ad_format == "Рекламный пост для соцсетей (VK / Telegram)":
-        return (
-            f"🔥 [Рекламный пост для соцсетей]\n"
-            f"Тема: {prompt}\n\n"
-            f"Хватит откладывать выгоду на потом! Банк «Центр-инвест» представляет специальное предложение: {prompt}. 💳✨\n\n"
-            f"Почему это выгодно именно вам:\n"
-            f"• Честные и прозрачные условия без скрытых комиссий\n"
-            f"• Быстрое оформление онлайн за 2 минуты без визита в офис\n"
-            f"• Удобное мобильное приложение и поддержка 24/7\n\n"
-            f"👉 Оформите заявку прямо сейчас и начните получать максимум выгоды: centrinvest.ru\n\n"
-            f"#ЦентрИнвест #БанкДляЛюдей #Выгода #Финансы"
-        )
-    elif ad_format == "Продающий слоган и УТП":
-        return (
-            f"⚡ [Продающие слоганы и УТП]\n"
-            f"Тема: {prompt}\n\n"
-            f"1. Яркий слоган:\n"
-            f"   «{prompt} — умная выгода от банка «Центр-инвест»!»\n\n"
-            f"2. Доверительный слоган:\n"
-            f"   «Надежные финансы Юга России: выбирайте лучшее для себя и бизнеса.»\n\n"
-            f"3. Динамичный слоган:\n"
-            f"   «Управляйте своими деньгами легко с «Центр-инвест».»\n\n"
-            f"💡 Уникальное торговое предложение (УТП):\n"
-            f"Моментальное онлайн-оформление, персональные условия и честные ставки."
-        )
-    elif ad_format == "Текст для баннера / сторис":
-        return (
-            f"📱 [Текст для рекламного баннера / сторис]\n"
-            f"Тема: {prompt}\n\n"
-            f"┌────────────────────────────────────────┐\n"
-            f"│  ВЫГОДА, КОТОРАЯ ВСЕГДА С ВАМИ! 🚀     │\n"
-            f"│                                        │\n"
-            f"│  {prompt[:45]}...                      │\n"
-            f"│  Специальные условия от «Центр-инвест» │\n"
-            f"│                                        │\n"
-            f"│  [ ОФОРМИТЬ В 1 КЛИК ➔ ]               │\n"
-            f"└────────────────────────────────────────┘\n\n"
-            f"Текст для кнопки (CTA): Оформить онлайн"
-        )
-    elif ad_format == "Акционное предложение (кэшбэк, скидки)":
-        return (
-            f"🎁 [Специальная акция от банка «Центр-инвест»]\n"
-            f"Тема: {prompt}\n\n"
-            f"Успейте воспользоваться ограниченным акционным предложением!\n"
-            f"Примите участие в акции: {prompt}.\n\n"
-            f"📋 Простые шаги для участия:\n"
-            f"1. Оставьте онлайн-заявку в приложении банка «Центр-инвест».\n"
-            f"2. Активируйте акционные условия.\n"
-            f"3. Получайте повышенный кэшбэк и бонусы на баланс.\n\n"
-            f"⏳ Срок действия акции ограничен. Подробности на официальном сайте."
-        )
-    else:
-        return f"Рекламное предложение банка «Центр-инвест» по теме «{prompt}» в формате [{ad_format}]."
-
-# --- 2. Каркас формы ввода (st.form) ---
-with st.form("ad_input_form"):
-    st.subheader("Параметры рекламного объявления")
-    
-    # Поле ввода рекламного запроса / темы
-    user_input = st.text_area(
-        label="Опишите продукт, акцию или тему рекламы:",
-        placeholder="Например: акция по дебетовой карте с повышенным кэшбэком 10% на АЗС, супермаркеты и рестораны...",
-        height=120,
-        help="Укажите ключевые детали предложения, продукта или акции банка Центр-инвест"
-    )
-    
-    # Поле выбора рекламного формата
-    ad_format = st.selectbox(
-        label="Выберите рекламный формат:",
-        options=[
-            "Рекламный пост для соцсетей (VK / Telegram)",
-            "Продающий слоган и УТП",
-            "Текст для баннера / сторис",
-            "Акционное предложение (кэшбэк, скидки)"
+# ==========================================
+# 2. БАЗЫ ДАННЫХ И НАСТРОЙКИ (ЦА, ТОН, ЛИМИТЫ)
+# ==========================================
+AUDIENCE_PRESETS = {
+    "Молодёжь (18–25)": {
+        "hooks": [
+            "Хватит сливать бюджет впустую — зацени {name}!",
+            "Тот самый апгрейд, который ты искал: {name}.",
+            "Залетай в тему с {name} — быстро, чётко и без лишней духоты."
         ],
-        help="Формат и площадка размещения рекламного материала"
-    )
+        "bodies": [
+            "Короче, суть простая: {desc}. Главный плюс — {adv}.",
+            "Без лишней воды: {desc}. Почему это топ? Потому что {adv}.",
+            "{desc}. Реально экономит время и нервы, ведь {adv}."
+        ],
+        "ctas": [
+            "Забирай сейчас за {price} — ссылка ниже 👇",
+            "Кликай и тестируй, пока прайс всего {price}!",
+            "Жми сюда и забирай свой вариант за {price}."
+        ]
+    },
+    "Семьи с детьми": {
+        "hooks": [
+            "Больше времени для близких вместе с {name}.",
+            "Забота и комфорт каждый день: встречайте {name}.",
+            "Надёжное решение для всей семьи — {name}."
+        ],
+        "bodies": [
+            "{desc}. Мы продумали всё до мелочей: {adv}.",
+            "Выбирая {name}, вы получаете спокойствие: {desc}. Главное преимущество — {adv}.",
+            "Идеально впишется в ваш ритм жизни: {desc}. Плюс к этому — {adv}."
+        ],
+        "ctas": [
+            "Оформите заказ за {price} и порадуйте семью уже сегодня.",
+            "Узнайте подробности и закажите по цене {price} →",
+            "Попробуйте {name} за {price} — перейдите на сайт."
+        ]
+    },
+    "B2B-клиенты / Бизнес": {
+        "hooks": [
+            "Оптимизируйте рабочие процессы с помощью {name}.",
+            "{name}: измеримый результат и надёжность для вашего бизнеса.",
+            "Снижайте издержки и масштабируйтесь вместе с {name}."
+        ],
+        "bodies": [
+            "{desc}. Ключевой аргумент для внедрения: {adv}.",
+            "Практичный инструмент для задач бизнеса: {desc}. Вы получаете: {adv}.",
+            "Решение проверено на практике: {desc}. Конкурентное преимущество — {adv}."
+        ],
+        "ctas": [
+            "Запросите коммерческое предложение (от {price}).",
+            "Оставьте заявку на расчёт — стоимость от {price}.",
+            "Перейдите по ссылке, чтобы обсудить внедрение ({price})."
+        ]
+    },
+    "Пенсионеры": {
+        "hooks": [
+            "Просто, понятно и с пользой: {name}.",
+            "Доступное и проверенное решение — {name}.",
+            "Позаботьтесь о себе с комфортом: {name}."
+        ],
+        "bodies": [
+            "{desc}. Всё устроено максимально удобно: {adv}.",
+            "Никаких сложностей: {desc}. Главное достоинство — {adv}.",
+            "{desc}. Вы оцените практичность, ведь {adv}."
+        ],
+        "ctas": [
+            "Закажите по честной цене {price} — нажмите здесь.",
+            "Узнайте подробнее и оформите за {price}.",
+            "Позвоните или оставьте заявку, цена — {price}."
+        ]
+    }
+}
+
+TONE_MODIFIERS = {
+    "Дружелюбный 😊": ("Привет! ", " 😊"),
+    "Формальный / Деловой": ("Уважаемый клиент. ", "."),
+    "Молодёжный 🔥": ("Йоу! ", " 🔥"),
+    "Экспертный": ("Факт: ", " — проверено практикой.")
+}
+
+PLATFORM_LIMITS = {
+    "Соцсети (VK / TG)": 500,
+    "Баннер (короткий)": 140,
+    "Email-рассылка": 1000,
+    "Карточка товара (WB / Ozon)": 600
+}
+
+FORBIDDEN_WORDS = {
+    "самый лучший": "один из лучших",
+    "гарантированный результат": "предсказуемый результат",
+    "гарантируем": "стремимся обеспечить",
+    "100%": "высокая вероятность",
+    "№1": "лидер в сегменте",
+    "номер один": "один из лидеров",
+    "абсолютно бесплатно": "без доплат на старте"
+}
+
+CTA_MARKERS = ["перейд", "жми", "клик", "закаж", "оформ", "забир", "оставьте", "запрос", "узнай", "попроб", "ссылк"]
+
+# ==========================================
+# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ==========================================
+def build_part(part_type, audience, data, tone, index=None, exclude=None):
+    preset = AUDIENCE_PRESETS.get(audience, AUDIENCE_PRESETS["Молодёжь (18–25)"])
+    templates = preset[part_type]
     
-    # Кнопка отправки формы
-    submitted = st.form_submit_button("🚀 Сгенерировать рекламу")
-
-# --- 3. Обработка нажатия кнопки формы ---
-if submitted:
-    if not user_input.strip():
-        st.error("⚠️ Поле описания рекламы не может быть пустым! Укажите тему или условия акции.")
+    if index is not None:
+        template = templates[index % len(templates)]
     else:
-        try:
-            with st.spinner("Генерация рекламного текста..."):
-                # Сохраняем исходные параметры для возможной перегенерации
-                st.session_state["last_prompt"] = user_input.strip()
-                st.session_state["last_format"] = ad_format
-                
-                # Вызываем генерацию
-                result_text = generate_advertising_text(user_input.strip(), ad_format)
-                st.session_state["result"] = result_text
-                st.success("Рекламный текст успешно сгенерирован!")
-        except Exception as e:
-            st.error(f"❌ Произошла ошибка при генерации: {e}")
+        candidates = []
+        for t in templates:
+            text = t.format(**data)
+            if part_type == "hooks":
+                text = TONE_MODIFIERS[tone][0] + text
+            elif part_type == "bodies":
+                text = text.rstrip(".") + TONE_MODIFIERS[tone][1]
+            if text != exclude:
+                candidates.append(text)
+        return random.choice(candidates) if candidates else exclude
 
-# --- 4. Отображение результата и кнопка копирования ---
-has_result = "result" in st.session_state and bool(st.session_state["result"])
+    text = template.format(**data)
+    if part_type == "hooks":
+        text = TONE_MODIFIERS[tone][0] + text
+    elif part_type == "bodies":
+        text = text.rstrip(".") + TONE_MODIFIERS[tone][1]
+    return text
 
-st.markdown("---")
-st.subheader("Сгенерированный рекламный материал")
+def validate_text(text, platform):
+    issues = []
+    limit = PLATFORM_LIMITS[platform]
+    if len(text) > limit:
+        issues.append(f"⚠️ Превышен лимит площадки ({len(text)}/{limit} симв.)")
+    
+    found_forbidden = [w for w in FORBIDDEN_WORDS if re.search(rf"\b{re.escape(w)}\b", text, re.IGNORECASE)]
+    if found_forbidden:
+        issues.append(f"🚫 Запрещённые/штампованные слова по ФЗ «О рекламе»: {', '.join(found_forbidden)}")
+    
+    if not any(marker in text.lower() for marker in CTA_MARKERS):
+        issues.append("⚠️ Не найден явный призыв к действию (CTA)")
+    return issues
 
-if has_result:
-    st.caption("Нажмите иконку копирования в правом верхнем углу блока с текстом, чтобы скопировать результат в буфер обмена:")
-    # st.code с language=None даёт встроенную кнопку копирования в один клик
-    st.code(st.session_state["result"], language=None)
-else:
-    st.caption("Здесь появится готовый рекламный текст после отправки формы.")
+def clean_forbidden(text):
+    for bad, good in FORBIDDEN_WORDS.items():
+        text = re.sub(rf"\b{re.escape(bad)}\b", good, text, flags=re.IGNORECASE)
+    return text
 
-# --- 5. Кнопка «Перегенерировать» с параметром disabled ---
-# Кнопка строго за пределами формы!
-col1, col2 = st.columns([1, 3])
-with col1:
-    regenerate_clicked = st.button(
-        "🔄 Перегенерировать",
-        disabled=not has_result,
-        help="Повторно сгенерировать рекламный текст для последнего введенного запроса"
+# ==========================================
+# 4. ИНТЕРФЕЙС ВВОДА (STREAMLIT FORM)
+# ==========================================
+st.title("🚀 ИИ-помощник для генерации рекламы (Центр-инвест)")
+st.caption("Модуль ввода: форма ввода параметров продукта, адаптация под аудиторию и генерация вариантов.")
+
+# Выносим форму ввода в боковую панель (sidebar) или основной блок
+with st.sidebar:
+    st.header("📋 Форма ввода параметров")
+    
+    with st.form("input_module_form"):
+        st.subheader("1. О продукте / услуге")
+        name = st.text_input(
+            label="Название продукта / услуги",
+            value="Дебетовая карта Центр-инвест",
+            help="Укажите бренд или название предложения"
+        )
+        desc = st.text_area(
+            label="Описание предложения",
+            value="Бесплатное обслуживание, повышенный кэшбэк на АЗС и супермаркеты, честный доход на остаток",
+            height=100,
+            help="Ключевые свойства и характеристики предложения"
+        )
+        adv = st.text_input(
+            label="Главное преимущество (УТП)",
+            value="кэшбэк реальными рублями без скрытых комиссий",
+            help="Чем предложение выгодно отличается от конкурентов"
+        )
+        price = st.text_input(
+            label="Цена / Оффер",
+            value="0 ₽ за обслуживание",
+            help="Стоимость, акция или тариф"
+        )
+
+        st.subheader("2. Настройки рекламы")
+        audience = st.selectbox(
+            label="Целевая аудитория",
+            options=list(AUDIENCE_PRESETS.keys()) + ["Своя аудитория"]
+        )
+        custom_aud = ""
+        if audience == "Своя аудитория":
+            custom_aud = st.text_input("Опишите боли и интересы ЦА", "Студенты, хотят копить и получать кэшбэк")
+
+        platform = st.selectbox("Площадка размещения", list(PLATFORM_LIMITS.keys()))
+        tone = st.selectbox("Тон общения", list(TONE_MODIFIERS.keys()))
+
+        # Кнопка отправки формы
+        submit_btn = st.form_submit_button("✨ Сгенерировать 3 варианта", use_container_width=True)
+
+# Обработка формы
+if submit_btn:
+    if not name.strip() or not desc.strip():
+        st.error("⚠️ Название и описание продукта не могут быть пустыми!")
+    else:
+        st.session_state["saved_data"] = {
+            "name": name.strip(),
+            "desc": desc.strip(),
+            "adv": adv.strip() or "высокая надежность и выгода",
+            "price": price.strip() or "выгодных условиях",
+            "audience": audience,
+            "custom_aud": custom_aud,
+            "platform": platform,
+            "tone": tone
+        }
+        
+        # Генерация 3 вариантов
+        st.session_state.variants = []
+        h_idx = random.sample(range(3), 3)
+        b_idx = random.sample(range(3), 3)
+        c_idx = random.sample(range(3), 3)
+        data = st.session_state["saved_data"]
+        
+        for i in range(3):
+            st.session_state.variants.append({
+                "hooks": build_part("hooks", data["audience"], data, data["tone"], index=h_idx[i]),
+                "bodies": build_part("bodies", data["audience"], data, data["tone"], index=b_idx[i]),
+                "ctas": build_part("ctas", data["audience"], data, data["tone"], index=c_idx[i])
+            })
+        st.success("✅ 3 рекламных варианта успешно сформированы!")
+
+# ==========================================
+# 5. ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ И КОПИРОВАНИЕ
+# ==========================================
+has_variants = "variants" in st.session_state and len(st.session_state.variants) > 0
+
+# Кнопка глобальной перегенерации (строго вне формы!)
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1:
+    st.subheader("📢 Сгенерированные рекламные материалы")
+with col_head2:
+    global_regen = st.button(
+        "🔄 Перегенерировать все",
+        disabled=not has_variants,
+        use_container_width=True,
+        help="Запустить повторную генерацию всех 3 вариантов"
     )
 
-if regenerate_clicked:
-    if "last_prompt" in st.session_state and "last_format" in st.session_state:
-        try:
-            with st.spinner("Перегенерация рекламного материала..."):
-                new_result = generate_advertising_text(
-                    st.session_state["last_prompt"],
-                    st.session_state["last_format"]
-                )
-                st.session_state["result"] = new_result
+if global_regen and "saved_data" in st.session_state:
+    data = st.session_state["saved_data"]
+    st.session_state.variants = []
+    h_idx = random.sample(range(3), 3)
+    b_idx = random.sample(range(3), 3)
+    c_idx = random.sample(range(3), 3)
+    for i in range(3):
+        st.session_state.variants.append({
+            "hooks": build_part("hooks", data["audience"], data, data["tone"], index=h_idx[i]),
+            "bodies": build_part("bodies", data["audience"], data, data["tone"], index=b_idx[i]),
+            "ctas": build_part("ctas", data["audience"], data, data["tone"], index=c_idx[i])
+        })
+    st.rerun()
+
+if not has_variants:
+    st.info("👈 Заполните параметры продукта в панели слева и нажмите кнопку «✨ Сгенерировать 3 варианта».")
+else:
+    cur_data = st.session_state.get("saved_data", {})
+    cur_platform = cur_data.get("platform", "Соцсети (VK / TG)")
+    cur_aud = cur_data.get("audience", "Молодёжь (18–25)")
+    cur_tone = cur_data.get("tone", "Дружелюбный 😊")
+
+    if cur_data.get("custom_aud"):
+        st.caption(f"🎯 Учтён сегмент ЦА: **{cur_data['custom_aud']}**")
+
+    # Отображение 3 колонок с вариантами
+    cols = st.columns(3)
+    for i, col in enumerate(cols):
+        v = st.session_state.variants[i]
+        full_text = f"{v['hooks']}\n\n{v['bodies']}\n\n{v['ctas']}"
+        issues = validate_text(full_text, cur_platform)
+
+        with col:
+            st.markdown(f"### Вариант #{i+1}")
+            st.caption("Нажмите иконку в углу блока для быстрого копирования:")
+            # Блок st.code с копированием в один клик
+            st.code(full_text, language=None)
+
+            # Валидация по ФЗ «О рекламе»
+            if not issues:
+                st.success("✅ Валидация пройдена (лимиты и стоп-слова в норме)")
+            else:
+                for iss in issues:
+                    st.warning(iss)
+                if any("Запрещённые" in iss for iss in issues):
+                    if st.button("🧹 Исправить стоп-слова", key=f"fix_{i}", use_container_width=True):
+                        for part in ["hooks", "bodies", "ctas"]:
+                            st.session_state.variants[i][part] = clean_forbidden(v[part])
+                        st.rerun()
+
+            # Пофрагментная перегенерация
+            st.caption("Перегенерировать фрагмент:")
+            c1, c2, c3 = st.columns(3)
+            if c1.button("Заголовок", key=f"h_{i}", use_container_width=True):
+                st.session_state.variants[i]["hooks"] = build_part("hooks", cur_aud, cur_data, cur_tone, exclude=v["hooks"])
                 st.rerun()
-        except Exception as e:
-            st.error(f"❌ Ошибка при перегенерации: {e}")
+            if c2.button("Основу", key=f"b_{i}", use_container_width=True):
+                st.session_state.variants[i]["bodies"] = build_part("bodies", cur_aud, cur_data, cur_tone, exclude=v["bodies"])
+                st.rerun()
+            if c3.button("CTA", key=f"c_{i}", use_container_width=True):
+                st.session_state.variants[i]["ctas"] = build_part("ctas", cur_aud, cur_data, cur_tone, exclude=v["ctas"])
+                st.rerun()
