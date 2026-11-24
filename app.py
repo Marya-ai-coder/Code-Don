@@ -465,8 +465,6 @@ class AdAssistantApp:                                      # Класс прил
                    command=self.clear_all).pack(side="left", padx=8)  # Привязка к методу.
         ttk.Button(btns, text="🔌 Тест ИИ",                # Кнопка проверки подключения к API.
                    command=self.test_ai).pack(side="left")  # Привязка к методу.
-        ttk.Button(btns, text="🔎 Проверить ввод",         # Новая кнопка проверки полей формы.
-                   command=self.check_input).pack(side="left", padx=8)  # Привязка к методу.
 
         # ---------- правая часть ----------
         ttk.Label(right, text="Сгенерированные варианты",  # Заголовок правой части.
@@ -523,15 +521,6 @@ class AdAssistantApp:                                      # Класс прил
                 "Проверка ввода", "\n".join("• " + e for e in errors))
             return None                                    # Прерываем сбор.
         return data                                        # Возвращаем данные.
-
-    def check_input(self):                                 # Кнопка «Проверить ввод» — без генерации.
-        data = self._read_form()                           # Читаем форму.
-        errors, _ = validate_input(data)                   # Проверяем только название.
-        if errors:                                         # Имя пустое…
-            messagebox.showwarning(                         # …показываем ошибку.
-                "Проверка ввода", "\n".join("• " + e for e in errors))
-        else:                                              # Имя заполнено — всё хорошо.
-            messagebox.showinfo("Проверка ввода", "Название продукта указано верно.")
 
     # ---------- генерация ----------
     def generate_all(self):                                # Генерирует все три варианта сразу.
