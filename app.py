@@ -23,6 +23,8 @@ except ImportError:                                        # Если файла
     AI_BASE_URL = "https://api.deepseek.com/v1"            # Адрес API по умолчанию.
     AI_MODEL = "deepseek-chat"                             # Модель по умолчанию.
 
+from regeneration import regenerate_with_validation       # Умная перегенерация с повторной проверкой.
+
 
 # ============================ СПРАВОЧНИКИ ============================
 
@@ -319,6 +321,32 @@ def generate_text(data):                                   # Совместим�
     return generate_text_with_source(data)[0]
 
 
+def rewrite_text_for_regeneration(prompt, data):           # Переделка текста при нажатии «↻».
+    """Сначала пробуем ИИ, если ключа нет — возвращаемся к шаблону."""
+    if ai_is_enabled():
+        try:
+            raw = ai_request(
+                [
+                    {
+                        "role": "system",
+                        "content": "Ты копирайтер. Верни только готовый рекламный текст без пояснений и без JSON.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.8,
+                max_tokens=1500,
+                json_mode=False,
+            )
+            text = str(raw).strip()
+            if text:
+                return text, "ИИ"
+        except Exception as e:                              # Сеть, ключ, формат ответа…
+            print("ИИ недоступен при перегенерации, использован шаблон:", e)
+    if data["platform"] == "Баннер":                        # Короткий формат…
+        return build_short_text(data), "шаблон"
+    return build_long_text(data), "шаблон"                   # Остальные площадки.
+
+
 # ============================ ВАЛИДАЦИЯ ============================
 
 def validate_text(text, platform):                         # Проверяет текст, возвращает список замечаний.
@@ -521,13 +549,28 @@ class AdAssistantApp:                                      # Класс прил
         if not self.data:                                  # Если данные ещё не собраны…
             messagebox.showinfo("Подсказка", "Сначала нажмите «Сгенерировать 3 варианта».")  # Подсказка.
             return                                         # Выход.
-        text, source = generate_text_with_source(self.data)  # Новый текст и его источник.
+        outcome = regenerate_with_validation(               # Переделываем и проверяем заново.
+            self.data,
+            self.variants[index],
+            validate_fn=validate_text,
+            rewrite_fn=rewrite_text_for_regeneration,
+            forbidden=FORBIDDEN,
+            platform_limits=PLATFORM_LIMITS,
+            max_attempts=3,
+        )
+        text = outcome["text"]                             # Итоговый текст.
+        source = outcome["source"]                         # Источник: ИИ или шаблон.
         self.variants[index] = text                        # Запоминаем текст.
         self.variant_source[index] = source                # Запоминаем источник.
         self.set_variant_text(index, text)                 # Обновляем UI.
         self.lbl_ai.configure(                             # Обновляем индикатор режима.
-            text=f"Последняя генерация: {source}",
-            fg="#0a7d28" if source == "ИИ" else "#b06a00")
+            text=f"Последняя перегенерация: {source} · попыток {outcome['attempts']}",
+            fg="#0a7d28" if outcome["ok"] else "#b06a00")
+        if not outcome["ok"]:                              # Если так и не прошли проверку…
+            messagebox.showwarning(                        # …показываем, что осталось.
+                f"Вариант {index + 1}",
+                "После 3 попыток остались замечания:\n\n"
+                + "\n".join("• " + s for s in outcome["issues"]))
 
     def set_variant_text(self, index, text):               # Выводит текст в нужный виджет.
         widget = self.variant_texts[index]                 # Берём виджет по индексу.
