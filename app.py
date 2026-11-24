@@ -372,6 +372,13 @@ def validate_text(text, platform):                         # Проверяет 
     return issues                                          # Возвращаем список замечаний.
 
 
+def validate_input(data):                                  # Только одна проверка: имя продукта.
+    """Пустое имя или одни пробелы — ошибка. Больше ничего не блокируем."""
+    product = str(data.get("product") or "").strip()       # Убираем пробелы по краям.
+    if not product:                                        # Пусто = одни пробелы тоже.
+        return ["Введите верное название продукта или услуги."], []
+    return [], []                                          # Всё остальное пропускаем.
+
 # ============================ ИНТЕРФЕЙС ============================
 
 class AdAssistantApp:                                      # Класс приложения (весь UI).
@@ -458,6 +465,8 @@ class AdAssistantApp:                                      # Класс прил
                    command=self.clear_all).pack(side="left", padx=8)  # Привязка к методу.
         ttk.Button(btns, text="🔌 Тест ИИ",                # Кнопка проверки подключения к API.
                    command=self.test_ai).pack(side="left")  # Привязка к методу.
+        ttk.Button(btns, text="🔎 Проверить ввод",         # Новая кнопка проверки полей формы.
+                   command=self.check_input).pack(side="left", padx=8)  # Привязка к методу.
 
         # ---------- правая часть ----------
         ttk.Label(right, text="Сгенерированные варианты",  # Заголовок правой части.
@@ -489,12 +498,8 @@ class AdAssistantApp:                                      # Класс прил
                        command=lambda idx=i: self.check_variant(idx)).pack(side="left")  # Привязка.
 
     # ---------- сбор данных ----------
-    def collect_data(self):                                # Собирает введённые данные в словарь.
+    def _read_form(self):                                  # Просто читаем поля, без проверок.
         product = self.e_product.get().strip()             # Читаем название продукта.
-        if not product:                                    # Если пусто…
-            messagebox.showwarning("Внимание", "Укажите название продукта.")  # …предупреждение.
-            return None                                    # Прерываем сбор.
-
         benefits = [line.strip(" -•\t")                    # Каждую строку очищаем от маркеров и пробелов.
                     for line in self.t_benefits.get("1.0", "end-1c").splitlines()]  # Построчный разбор.
         benefits = [b for b in benefits if b]              # Убираем пустые строки.
@@ -509,6 +514,24 @@ class AdAssistantApp:                                      # Класс прил
             "audience_custom": self.e_audience_custom.get().strip(),  # Своя аудитория.
             "tone": self.cb_tone.get(),                    # Тон.
         }                                                  # Конец словаря.
+
+    def collect_data(self):                                # Собираем данные и проверяем имя.
+        data = self._read_form()                           # Читаем форму.
+        errors, _ = validate_input(data)                   # Проверяем только название.
+        if errors:                                         # Имя пустое — генерацию не запускаем.
+            messagebox.showwarning(                         # Показываем понятную ошибку.
+                "Проверка ввода", "\n".join("• " + e for e in errors))
+            return None                                    # Прерываем сбор.
+        return data                                        # Возвращаем данные.
+
+    def check_input(self):                                 # Кнопка «Проверить ввод» — без генерации.
+        data = self._read_form()                           # Читаем форму.
+        errors, _ = validate_input(data)                   # Проверяем только название.
+        if errors:                                         # Имя пустое…
+            messagebox.showwarning(                         # …показываем ошибку.
+                "Проверка ввода", "\n".join("• " + e for e in errors))
+        else:                                              # Имя заполнено — всё хорошо.
+            messagebox.showinfo("Проверка ввода", "Название продукта указано верно.")
 
     # ---------- генерация ----------
     def generate_all(self):                                # Генерирует все три варианта сразу.
