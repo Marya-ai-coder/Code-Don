@@ -4,7 +4,7 @@
 """
 Кейс 9. Регион 2 — прототип ИИ-помощника по генерации рекламных текстов.
 Модули: ввод данных → генерация → адаптация под ЦА → проверка → UI → документация.
-Запуск: python keys_9_ai.py   (ключ API — в файле config.py рядом с программой)
+Запуск: python app.py   (ключ API — в файле config.py рядом с программой)
 """
 
 import random                                              # Импорт модуля random — нужен для случайного выбора фраз.
@@ -14,6 +14,13 @@ import json                                                # Разбор JSON-�
 import os                                                  # Пути к файлам (ищем config.py рядом).
 import sys                                                 # Управление путями импорта.
 import requests                                            # HTTP-запросы к API (пакет уже установлен).
+from pathlib import Path                                    # Безопасный путь к фону.
+try:
+    from PIL import Image, ImageTk                         # Загрузка и масштабирование JPG-фона.
+except ImportError:
+    Image = ImageTk = None
+import guides as guide
+import validator as text_validator
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # Чтобы config.py нашёлся при любом способе запуска.
 try:                                                       # Ключи API держим в отдельном файле config.py…
@@ -22,138 +29,6 @@ except ImportError:                                        # Если файла
     AI_API_KEY = ""                                        # …ключа нет, работаем на шаблонах.
     AI_BASE_URL = "https://api.deepseek.com/v1"            # Адрес API по умолчанию.
     AI_MODEL = "deepseek-chat"                             # Модель по умолчанию.
-
-
-# ============================ СПРАВОЧНИКИ ============================
-
-AUDIENCE_STYLES = {                                        # Словарь стилей под каждую целевую аудиторию.
-    "Молодёжь (16–25)": {                                  # Ключ — название сегмента.
-        "hooks": [                                         # Список «хуков» — цепляющих первых фраз.
-            "Стоп-скролл! Это реально про тебя.",          # Хук №1.
-            "Есть тема, которая зайдёт.",                  # Хук №2.
-            "Не листай дальше — тут по делу.",             # Хук №3.
-        ],                                                 # Конец списка хуков.
-        "args": [                                          # Список аргументов-выгод под сегмент.
-            "Экономит время, пока ты занимаешься тем, что важно.",  # Аргумент №1.
-            "Без сложных условий — разберёшься за минуту.",         # Аргумент №2.
-            "Современно, удобно и без лишней воды.",                # Аргумент №3.
-        ],                                                 # Конец списка аргументов.
-    },                                                     # Конец блока «Молодёжь».
-    "Семьи с детьми": {                                    # Аудитория «Семьи с детьми».
-        "hooks": [                                         # Хуки под семьи.
-            "Мамы и папы, это для вас.",                   # Хук №1.
-            "Забота о семье начинается с простых решений.",# Хук №2.
-            "Больше времени на близких — меньше на быт.",  # Хук №3.
-        ],                                                 # Конец хуков.
-        "args": [                                          # Аргументы под семьи.
-            "Помогает освободить время для семьи.",        # Аргумент №1.
-            "Продумано до мелочей и безопасно.",           # Аргумент №2.
-            "Выгодно для семейного бюджета.",              # Аргумент №3.
-        ],                                                 # Конец аргументов.
-    },                                                     # Конец блока «Семьи с детьми».
-    "B2B-клиенты": {                                       # Аудитория «B2B-клиенты».
-        "hooks": [                                         # Хуки под B2B.
-            "Уважаемые коллеги, предлагаем решение для вашего бизнеса.",  # Хук №1.
-            "Коротко о том, что снизит ваши издержки.",    # Хук №2.
-            "Решение, которое окупается.",                 # Хук №3.
-        ],                                                 # Конец хуков.
-        "args": [                                          # Аргументы под B2B.
-            "Прозрачные условия и понятная экономика внедрения.",      # Аргумент №1.
-            "Подходит для команд любого размера.",         # Аргумент №2.
-            "Снижает трудозатраты и ускоряет процессы.",   # Аргумент №3.
-        ],                                                 # Конец аргументов.
-    },                                                     # Конец блока «B2B».
-    "Пенсионеры (55+)": {                                  # Аудитория «Пенсионеры».
-        "hooks": [                                         # Хуки под пенсионеров.
-            "Уважаемые друзья, это предложение для вас.",  # Хук №1.
-            "Просто, понятно и с заботой о вас.",          # Хук №2.
-            "Внимание к деталям — в каждом решении.",      # Хук №3.
-        ],                                                 # Конец хуков.
-        "args": [                                          # Аргументы под пенсионеров.
-            "Ничего сложного — всё понятно и доступно.",   # Аргумент №1.
-            "Поддержка на каждом шаге.",                   # Аргумент №2.
-            "Честные условия без мелкого шрифта.",         # Аргумент №3.
-        ],                                                 # Конец аргументов.
-    },                                                     # Конец блока «Пенсионеры».
-}                                                          # Конец словаря AUDIENCE_STYLES.
-
-TONES = {                                                  # Словарь тональностей.
-    "Формальный": {                                        # Формальный тон.
-        "intro": "Добрый день!",                           # Приветствие.
-        "style": [                                         # Стилевые фразы.
-            "Предложение действительно для новых клиентов.",   # Фраза №1.
-            "Условия прозрачны и зафиксированы в договоре.",    # Фраза №2.
-        ],                                                 # Конец стилевых фраз.
-        "closing": "С уважением, команда «{product}».",    # Подпись с подстановкой названия.
-    },                                                     # Конец формального.
-    "Дружелюбный": {                                       # Дружелюбный тон.
-        "intro": "Привет! 👋",                             # Приветствие с эмодзи.
-        "style": [                                         # Стилевые фразы.
-            "Мы всегда рядом и готовы помочь.",            # Фраза №1.
-            "Просто, по-человечески и без сложностей.",    # Фраза №2.
-        ],                                                 # Конец фраз.
-        "closing": "Будем рады помочь — команда «{product}».",  # Подпись.
-    },                                                     # Конец дружелюбного.
-    "Молодёжный": {                                        # Молодёжный тон.
-        "intro": "Йоу! 🔥",                                # Приветствие.
-        "style": [                                         # Стилевые фразы.
-            "Это по-настоящему удобно.",                   # Фраза №1.
-            "Без душноты — только по делу.",               # Фраза №2.
-        ],                                                 # Конец фраз.
-        "closing": "Погнали — «{product}».",               # Подпись.
-    },                                                     # Конец молодёжного.
-    "Экспертный": {                                        # Экспертный тон.
-        "intro": "Здравствуйте!",                          # Приветствие.
-        "style": [                                         # Стилевые фразы.
-            "Подход опирается на проверенную методику.",   # Фраза №1.
-            "Решение протестировано на реальных задачах.", # Фраза №2.
-        ],                                                 # Конец фраз.
-        "closing": "Команда «{product}».",                 # Подпись.
-    },                                                     # Конец экспертного.
-}                                                          # Конец словаря TONES.
-
-CTA_BY_PLATFORM = {                                        # Словарь призывов к действию по площадкам.
-    "Соцсети (пост)": [                                    # CTA для соцсетей.
-        "👉 Переходи по ссылке и выбирай!",                # CTA №1.
-        "Жми «Подробнее» и забирай своё!",                 # CTA №2.
-        "Напиши «+» в комментариях — расскажем подробнее!",# CTA №3.
-    ],                                                     # Конец CTA соцсетей.
-    "Email": [                                             # CTA для email.
-        "Перейдите по ссылке, чтобы оформить заказ.",      # CTA №1.
-        "Ответьте на письмо — подберём решение под вас.",  # CTA №2.
-    ],                                                     # Конец CTA email.
-    "Баннер": ["Узнать больше", "Заказать", "Перейти"],    # CTA для баннера (короткие).
-    "Карточка товара": [                                   # CTA для карточки товара.
-        "Добавьте в корзину.",                             # CTA №1.
-        "Оформите заказ сейчас.",                          # CTA №2.
-        "Нажмите «Купить».",                               # CTA №3.
-    ],                                                     # Конец CTA карточки.
-}                                                          # Конец CTA_BY_PLATFORM.
-
-PLATFORMS = list(CTA_BY_PLATFORM.keys())                   # Список площадок для Combobox.
-TONES_LIST = list(TONES.keys())                            # Список тонов для Combobox.
-AUDIENCES = list(AUDIENCE_STYLES.keys()) + ["Своя аудитория"]  # Список ЦА + вариант «своя».
-
-PLATFORM_LIMITS = {                                        # (мин, макс) символов под каждую площадку.
-    "Соцсети (пост)": (80, 1000),                          # Пост — 80–1000.
-    "Email": (120, 1500),                                  # Email — 120–1500.
-    "Баннер": (5, 90),                                     # Баннер — 5–90.
-    "Карточка товара": (60, 500),                          # Карточка — 60–500.
-}                                                          # Конец словаря лимитов.
-
-CTA_WORDS = [                                              # Список слов-маркеров призыва к действию.
-    "закажи", "закажите", "заказать", "перейди", "перейдите", "перейти",  # Глаголы в разных формах.
-    "переходи", "оставь", "оставьте", "купи", "купите", "узнай", "узнайте",  # Часть 2.
-    "узнать", "подпишись", "подпишитесь", "жми", "нажмите", "попробуй",  # Часть 3.
-    "попробуйте", "звони", "звоните", "оформи", "оформите", "получи",   # Часть 4.
-    "получите", "добавьте", "выбирай", "забирай", "напиши", "ответьте", # Часть 5.
-]                                                          # Конец списка CTA-слов.
-
-FORBIDDEN = [                                              # Список запрещённых формулировок (по ТЗ).
-    "самый лучший", "лучший в мире", "лучший на рынке",    # Превосходные степени.
-    "гарантированный результат", "гарантируем", "100%",    # Обещания результата.
-    "абсолютно безопасно", "абсолютно",                    # Абсолютные утверждения.
-]                                                          # Конец списка.
 
 
 # ============================ ИИ (API) ============================
@@ -213,7 +88,7 @@ def ai_parse_json(raw):                                    # Достаём JSON
 
 
 def ai_prompt_for_variants(data, n):                       # Промпт с параметрами продукта.
-    lo, hi = PLATFORM_LIMITS.get(data["platform"], (0, 5000))  # Лимиты символов под площадку.
+    lo, hi = guide.PLATFORM_LIMITS.get(data["platform"], (0, 5000))  # Лимиты символов под площадку.
     audience = (data.get("audience_custom") or "").strip()  # Своя ЦА…
     if data["audience"] != "Своя аудитория":               # …или выбранный сегмент.
         audience = data["audience"]                        # Берём сегмент из списка.
@@ -227,7 +102,7 @@ def ai_prompt_for_variants(data, n):                       # Промпт с п�
         f"Тон: {data['tone']}\n"
         f"Площадка: {data['platform']} — от {lo} до {hi} символов на текст\n"
         f"Обязательно: в каждом тексте есть призыв к действию.\n"
-        f"Запрещено использовать: {', '.join(FORBIDDEN)}.\n"
+        f"Запрещено использовать: {', '.join(guide.FORBIDDEN)}.\n"
         f"Тексты должны заметно отличаться друг от друга.\n"
         'Верни строго JSON: {"variants": ["текст 1", "текст 2", "текст 3"]}'
     )
@@ -249,8 +124,8 @@ def ai_generate_variants(data, n=3):                       # n текстов о
 
 def get_audience_style(data):                              # Возвращает стиль под выбранную ЦА.
     key = data["audience"]                                 # Достаём ключ аудитории из словаря data.
-    if key in AUDIENCE_STYLES:                             # Если аудитория из готовых шаблонов…
-        return AUDIENCE_STYLES[key]                        # …возвращаем её стиль.
+    if key in guide.AUDIENCE_STYLES:                             # Если аудитория из готовых шаблонов…
+        return guide.AUDIENCE_STYLES[key]                        # …возвращаем её стиль.
                                                            # Иначе (своя аудитория):
     custom = data.get("audience_custom", "").strip()       # Берём пользовательский ввод, чистим пробелы.
     arg = (f"Подойдёт тем, для кого важно: {custom}."      # Формируем аргумент с подстановкой.
@@ -267,7 +142,7 @@ def get_audience_style(data):                              # Возвращае�
 def build_long_text(data):                                 # Собирает длинный рекламный текст.
     """Полный рекламный текст под соцсети / email / карточку товара."""
     aud = get_audience_style(data)                         # Получаем стиль ЦА.
-    tone = TONES[data["tone"]]                             # Получаем блок тональности.
+    tone = guide.TONES[data["tone"]]                             # Получаем блок тональности.
     parts = []                                             # Список строк будущего текста.
 
     parts.append(f"{tone['intro']} {random.choice(aud['hooks'])}")  # 1) Приветствие + случайный хук.
@@ -287,7 +162,7 @@ def build_long_text(data):                                 # Собирает д
     if data["price"]:                                      # Если указана цена…
         parts.append(f"Цена: {data['price']}.")            # …добавляем строку с ценой.
 
-    parts.append(random.choice(CTA_BY_PLATFORM[data["platform"]]))  # Случайный CTA под площадку.
+    parts.append(random.choice(guide.CTA_BY_PLATFORM[data["platform"]]))  # Случайный CTA под площадку.
     parts.append(tone["closing"].format(product=data["product"]))   # Подпись с подстановкой названия.
 
     return "\n".join(parts)                                # Склеиваем строки через \n.
@@ -298,7 +173,7 @@ def build_short_text(data):                                # Собирает к
     benefit = data["benefits"][0] if data["benefits"] else data["description"]  # Берём 1-ю выгоду или описание.
     if benefit and len(benefit) > 45:                      # Если выгода слишком длинная…
         benefit = benefit[:45].rstrip() + "…"              # …обрезаем до 45 симв. и добавляем многоточие.
-    cta = random.choice(CTA_BY_PLATFORM["Баннер"])         # Случайный короткий CTA.
+    cta = random.choice(guide.CTA_BY_PLATFORM["Баннер"])         # Случайный короткий CTA.
     if benefit:                                            # Если выгода есть…
         return f"{data['product']}: {benefit}. {cta}!"     # …формат «Продукт: выгода. CTA!».
     return f"{data['product']}. {cta}!"                    # Иначе — только продукт и CTA.
@@ -321,30 +196,117 @@ def generate_text(data):                                   # Совместим�
 
 # ============================ ВАЛИДАЦИЯ ============================
 
-def validate_text(text, platform):                         # Проверяет текст, возвращает список замечаний.
-    """Модуль проверки: длина, призыв к действию, запрещённые формулировки."""
-    issues = []                                            # Список замечаний (изначально пуст).
-    low = text.lower()                                     # Приводим текст к нижнему регистру для поиска.
-    n = len(text)                                          # Длина текста в символах.
-
-    lo, hi = PLATFORM_LIMITS.get(platform, (0, 5000))      # Достаём лимиты под площадку (или дефолт).
-    if n > hi:                                             # Если текст длиннее макс…
-        issues.append(f"Текст длиннее лимита для «{platform}»: {n} симв. (макс. {hi}).")  # …замечание.
-    if n < lo:                                             # Если текст короче мин…
-        issues.append(f"Текст короче рекомендуемого: {n} симв. (мин. {lo}).")  # …замечание.
-
-    if not any(w in low for w in CTA_WORDS):               # Если ни одного CTA-слова не найдено…
-        issues.append("Не найден призыв к действию "       # …замечание про CTA.
-                      "(например: «Закажите», «Перейдите», «Попробуйте»).")
-
-    for bad in FORBIDDEN:                                  # Проходим по запрещённым фразам.
-        if bad in low:                                     # Если фраза найдена…
-            issues.append(f"Нежелательная формулировка: «{bad}».")  # …добавляем замечание.
-
-    return issues                                          # Возвращаем список замечаний.
-
-
 # ============================ ИНТЕРФЕЙС ============================
+
+# ---------- скруглённые элементы (мягкий квадрат) ----------
+def _rounded_rect(canvas, x1, y1, x2, y2, radius, fill, outline, width=1, tags=None):
+    # Рисует прямоугольник со скруглёнными углами на Canvas.
+    r = max(2, min(radius, (x2 - x1) // 2, (y2 - y1) // 2))
+    points = [
+        x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r,
+        x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2,
+        x1, y2, x1, y2 - r, x1, y1 + r, x1, y1,
+    ]
+    return canvas.create_polygon(points, smooth=True, splinesteps=32,
+                                 fill=fill, outline=outline, width=width, tags=tags)
+
+
+class RoundedField(tk.Frame):
+    # Поле ввода в «мягком квадрате»: скруглённый светло-голубой фон вместо белого.
+    BG = "#EAF6FF"
+    BORDER = "#B8D4F0"
+    FOCUS = "#60A5FA"
+    FG = "#0F2942"
+
+    def __init__(self, parent, kind="entry", radius=8, height=32,
+                 font=("Segoe UI", 10)):
+        parent_bg = parent.cget("bg")
+        super().__init__(parent, bg=parent_bg, bd=0, highlightthickness=0)
+        self.radius = radius
+        self._kind = kind
+        self._focused = False
+        self.canvas = tk.Canvas(self, bg=parent_bg, bd=0, highlightthickness=0, height=height)
+        self.canvas.pack(fill="both", expand=True)
+        if kind == "text":
+            self.widget = tk.Text(self.canvas, bd=0, relief="flat", highlightthickness=0,
+                                  bg=self.BG, fg=self.FG, insertbackground="#0369A1",
+                                  font=font, wrap="word", padx=6, pady=4)
+        elif kind == "combo":
+            self.widget = ttk.Combobox(self.canvas, state="readonly", font=font,
+                                       style="Field.TCombobox")
+        else:
+            self.widget = tk.Entry(self.canvas, bd=0, relief="flat", highlightthickness=0,
+                                   bg=self.BG, fg=self.FG, insertbackground="#0369A1",
+                                   font=font)
+        self._win = self.canvas.create_window(0, 0, anchor="nw", window=self.widget)
+        self.canvas.bind("<Configure>", self._redraw)
+        self.widget.bind("<FocusIn>", lambda _e: self._redraw(True), add="+")
+        self.widget.bind("<FocusOut>", lambda _e: self._redraw(False), add="+")
+        self._redraw()
+
+    def _redraw(self, focused=None):
+        if focused is not None:
+            self._focused = bool(focused)
+        c = self.canvas
+        width, height = c.winfo_width(), c.winfo_height()
+        if width < 4 or height < 4:
+            return
+        c.delete("field")
+        _rounded_rect(c, 1, 1, width - 1, height - 1, self.radius, self.BG,
+                      self.FOCUS if self._focused else self.BORDER, tags="field")
+        c.tag_lower("field")
+        if self._kind == "text":
+            pad = 5
+            c.coords(self._win, pad, pad)
+            c.itemconfigure(self._win, width=width - 2 * pad, height=height - 2 * pad)
+        else:
+            c.coords(self._win, 8, 2)
+            c.itemconfigure(self._win, width=width - 16, height=height - 4)
+
+
+class RoundedButton(tk.Canvas):
+    # Кнопка со скруглёнными углами в стиле design.py (radius 10, #BAE6FD).
+    def __init__(self, parent, text, command, radius=10, bg="#BAE6FD", hover="#93C5FD",
+                 fg="#0C4A6E", border="#7DD3FC", hover_border="#60A5FA",
+                 font=("Segoe UI", 10, "bold"), width=120, height=32):
+        parent_bg = parent.cget("bg")
+        super().__init__(parent, bg=parent_bg, bd=0, highlightthickness=0,
+                         width=width, height=height, cursor="hand2")
+        self._text = text
+        self._command = command
+        self._radius = radius
+        self._bg = bg
+        self._hover = hover
+        self._fg = fg
+        self._border = border
+        self._hover_border = hover_border
+        self._font = font
+        self._hovered = False
+        self.bind("<Configure>", lambda _e: self._redraw())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", lambda _e: self._command())
+        self._redraw()
+
+    def _on_enter(self, _event=None):
+        self._hovered = True
+        self._redraw()
+
+    def _on_leave(self, _event=None):
+        self._hovered = False
+        self._redraw()
+
+    def _redraw(self):
+        width, height = self.winfo_width(), self.winfo_height()
+        if width < 4 or height < 4:
+            return
+        self.delete("all")
+        _rounded_rect(self, 1, 1, width - 1, height - 1, self._radius,
+                      self._hover if self._hovered else self._bg,
+                      self._hover_border if self._hovered else self._border)
+        self.create_text(width // 2, height // 2, text=self._text,
+                         fill=self._fg, font=self._font)
+
 
 class AdAssistantApp:                                      # Класс приложения (весь UI).
     def __init__(self, root):                              # Конструктор — вызывается при запуске.
@@ -352,6 +314,10 @@ class AdAssistantApp:                                      # Класс прил
         self.root.title("ИИ-помощник по рекламным текстам — прототип")  # Заголовок окна.
         self.root.geometry("1280x820")                     # Начальный размер окна.
         self.root.minsize(1100, 700)                       # Минимальный размер окна.
+        self.root.configure(bg="#F0F7FF")                  # Цвет интерфейса из design.py.
+        self._bg_original = None                            # Исходный фон.
+        self._bg_photo = None                               # Ссылка, чтобы Tkinter не удалил изображение.
+        self._setup_background()                            # Подключаем fon.jpg.
 
         self.data = None                                   # Здесь будут храниться введённые данные.
         self.variants = ["", "", ""]                       # Тексты трёх вариантов (пока пустые).
@@ -366,99 +332,225 @@ class AdAssistantApp:                                      # Класс прил
             return f"🤖 Ключ задан: {AI_MODEL} — нажмите «Тест ИИ»"  # …модель и подсказка.
         return "📋 ИИ выключен: ключ пуст, работают шаблоны"  # Иначе — режим шаблонов.
 
+    def _setup_background(self):                         # Загружает fon.jpg (показ — в _build_ui).
+        if Image is None:
+            return
+        image_path = Path(__file__).resolve().parent / "fon.jpg"
+        if not image_path.exists():
+            return
+        try:
+            self._bg_original = Image.open(image_path).convert("RGB")
+        except Exception as exc:
+            print(f"Фон не загружен: {exc}")
+
+    def _attach_background(self, host):                  # Кладёт фото под карточки интерфейса.
+        if getattr(self, "_bg_original", None) is None:
+            return
+        self._bg_host = host
+        self._bg_size = None
+        self._bg_label = tk.Label(host, bd=0, highlightthickness=0)
+        self._bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        self._bg_label.lower()
+        host.bind("<Configure>", self._resize_background)
+        self._resize_background()
+
+    def _resize_background(self, _event=None):           # Масштабирует фото по размеру окна (cover).
+        if getattr(self, "_bg_original", None) is None or not hasattr(self, "_bg_label"):
+            return
+        width = max(self._bg_host.winfo_width(), 1)
+        height = max(self._bg_host.winfo_height(), 1)
+        if self._bg_size == (width, height):
+            return
+        self._bg_size = (width, height)
+        try:
+            image = self._bg_original.copy()
+            scale = max(width / image.width, height / image.height)
+            image = image.resize((max(int(image.width * scale) + 1, width),
+                                  max(int(image.height * scale) + 1, height)),
+                                 Image.Resampling.LANCZOS)
+            left = max((image.width - width) // 2, 0)
+            top = max((image.height - height) // 2, 0)
+            image = image.crop((left, top, left + width, top + height))
+            self._bg_photo = ImageTk.PhotoImage(image)
+            self._bg_label.configure(image=self._bg_photo)
+        except Exception as exc:
+            print(f"Фон не масштабирован: {exc}")
+
     # ---------- построение UI ----------
-    def _build_ui(self):                                   # Метод построения всех виджетов.
-        left = ttk.Frame(self.root, padding=12)            # Левая колонка (форма ввода).
-        left.pack(side="left", fill="y")                   # Прижимаем влево, растягиваем по высоте.
+    def _build_ui(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure("Field.TCombobox", fieldbackground="#EAF6FF", background="#EAF6FF",
+                        foreground="#0F2942", borderwidth=0, relief="flat",
+                        arrowcolor="#0369A1", padding=(6, 4))
+        style.map("Field.TCombobox",
+                  fieldbackground=[("readonly", "#EAF6FF"), ("focus", "#EAF6FF")],
+                  background=[("readonly", "#EAF6FF"), ("active", "#E0F2FE")])
+        style.configure("Card.TNotebook", background="#FFFFFF", borderwidth=0)
+        style.configure("Card.TNotebook.Tab", background="#E0F2FE", foreground="#3B5978",
+                        padding=(12, 7), font=("Segoe UI", 9, "bold"))
+        style.map("Card.TNotebook.Tab", background=[("selected", "#BAE6FD")],
+                  foreground=[("selected", "#0369A1")])
+        style.configure("Card.Vertical.TScrollbar", background="#E0F2FE",
+                        troughcolor="#FFFFFF", borderwidth=0, arrowcolor="#0369A1")
 
-        right = ttk.Frame(self.root, padding=12)           # Правая колонка (результаты).
-        right.pack(side="left", fill="both", expand=True)  # Растягиваем по ширине и высоте.
+        shell = tk.Frame(self.root, bg="#F0F7FF")
+        shell.pack(fill="both", expand=True, padx=26, pady=20)
+        self._attach_background(shell)                     # Фото fon.jpg под карточками.
+        header = tk.Frame(shell, bg="#FFFFFF", padx=20, pady=12)
+        header.pack(fill="x", pady=(0, 12))
+        tk.Label(header, text="ИИ-помощник для генерации рекламы", bg="#FFFFFF",
+                 fg="#0F2942", font=("Segoe UI", 20, "bold")).pack(anchor="w")
+        tk.Label(header, text="Центр-инвест  •  адаптация под аудиторию  •  проверка текста",
+                 bg="#FFFFFF", fg="#3B5978", font=("Segoe UI", 10)).pack(anchor="w", pady=(3, 0))
+        self.lbl_ai = tk.Label(header, text=self.ai_status_text(), bg="#FFFFFF",
+                               fg="#1f4e9c" if ai_is_enabled() else "#6b6b6b",
+                               font=("Segoe UI", 9), anchor="w")
+        self.lbl_ai.pack(anchor="w", pady=(6, 0))
 
-        ttk.Label(left, text="Данные о продукте",          # Заголовок секции.
-                  font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))  # Жирный, слева.
+        body = tk.Frame(shell, bg="#F0F7FF")
+        body.pack(fill="both", expand=True)
+        left = tk.Frame(body, bg="#FFFFFF", padx=16, pady=12)
+        left.pack(side="left", fill="y", padx=(0, 12))
+        right = tk.Frame(body, bg="#FFFFFF", padx=18, pady=14)
+        right.pack(side="left", fill="both", expand=True)
 
-        self.lbl_ai = tk.Label(left, text=self.ai_status_text(),  # Строка состояния: ИИ или шаблоны.
-                               font=("Segoe UI", 9), anchor="w", justify="left",
-                               fg="#1f4e9c" if ai_is_enabled() else "#6b6b6b")  # Синий/серый.
-        self.lbl_ai.pack(anchor="w", pady=(0, 10))         # Под заголовком.
+        # Кнопки прижаты к низу карточки: они видны всегда, даже если поля не помещаются.
+        actions = tk.Frame(left, bg="#FFFFFF")
+        actions.pack(side="bottom", fill="x", pady=(10, 0))
+        RoundedButton(actions, "✨ Сгенерировать", self.generate_all).pack(fill="x", pady=(0, 6))
+        RoundedButton(actions, "🔌 Тест ИИ", self.test_ai, bg="#FFFFFF", fg="#0369A1",
+                      border="#B8D4F0", hover="#EAF6FF",
+                      hover_border="#7DD3FC").pack(fill="x", pady=(0, 4))
+        RoundedButton(actions, "Очистить", self.clear_all, bg="#FFFFFF", fg="#0369A1",
+                      border="#B8D4F0", hover="#EAF6FF",
+                      hover_border="#7DD3FC").pack(fill="x")
 
-        ttk.Label(left, text="Название продукта").pack(anchor="w")  # Подпись поля.
-        self.e_product = ttk.Entry(left, width=48)         # Поле ввода названия продукта.
-        self.e_product.pack(anchor="w", pady=(0, 6))       # Прижимаем влево, отступ снизу.
+        # Поля — в прокручиваемой области, чтобы ничего не пропадало на маленьком экране.
+        fields_wrap = tk.Frame(left, bg="#FFFFFF")
+        fields_wrap.pack(fill="both", expand=True)
+        fields_canvas = tk.Canvas(fields_wrap, bg="#FFFFFF", bd=0, highlightthickness=0, width=430)
+        fields_scroll = ttk.Scrollbar(fields_wrap, orient="vertical",
+                                      style="Card.Vertical.TScrollbar",
+                                      command=fields_canvas.yview)
+        fields_canvas.configure(yscrollcommand=fields_scroll.set)
+        fields_scroll.pack(side="right", fill="y")
+        fields_canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(fields_canvas, bg="#FFFFFF")
+        inner_id = fields_canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>",
+                   lambda _e: fields_canvas.configure(scrollregion=fields_canvas.bbox("all")))
+        fields_canvas.bind("<Configure>",
+                           lambda e: fields_canvas.itemconfigure(inner_id, width=e.width))
 
-        ttk.Label(left, text="Описание").pack(anchor="w")  # Подпись поля.
-        self.t_desc = tk.Text(left, width=48, height=3, wrap="word",  # Многострочное поле описания.
-                              font=("Segoe UI", 10))       # Шрифт.
-        self.t_desc.pack(anchor="w", pady=(0, 6))          # Упаковка.
+        def _wheel(event):
+            widget = event.widget
+            if isinstance(widget, (tk.Text, ttk.Combobox)):
+                return
+            x, y = fields_canvas.winfo_pointerxy()
+            if not (fields_canvas.winfo_rootx() <= x <= fields_canvas.winfo_rootx() + fields_canvas.winfo_width()
+                    and fields_canvas.winfo_rooty() <= y <= fields_canvas.winfo_rooty() + fields_canvas.winfo_height()):
+                return
+            fields_canvas.yview_scroll(int(-event.delta / 120), "units")
 
-        ttk.Label(left, text="Преимущества (по одному в строке)").pack(anchor="w")  # Подпись.
-        self.t_benefits = tk.Text(left, width=48, height=4, wrap="word",  # Поле преимуществ.
-                                  font=("Segoe UI", 10))   # Шрифт.
-        self.t_benefits.pack(anchor="w", pady=(0, 6))      # Упаковка.
+        self.root.bind_all("<MouseWheel>", _wheel)
 
-        ttk.Label(left, text="Цена").pack(anchor="w")      # Подпись поля цены.
-        self.e_price = ttk.Entry(left, width=48)           # Поле цены.
-        self.e_price.pack(anchor="w", pady=(0, 6))         # Упаковка.
+        tk.Label(inner, text="Параметры рекламы", bg="#FFFFFF", fg="#0F2942",
+                 font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 8))
 
-        ttk.Label(left, text="Площадка размещения").pack(anchor="w")  # Подпись.
-        self.cb_platform = ttk.Combobox(left, values=PLATFORMS,  # Выпадающий список площадок.
-                                        state="readonly", width=45)  # Только выбор, не ввод.
-        self.cb_platform.set(PLATFORMS[0])                 # По умолчанию — первая площадка.
-        self.cb_platform.pack(anchor="w", pady=(0, 6))     # Упаковка.
+        self._field_label(inner, "Название продукта")
+        self.f_product = RoundedField(inner, "entry", height=32)
+        self.f_product.pack(fill="x", pady=(0, 6))
+        self.e_product = self.f_product.widget
 
-        ttk.Label(left, text="Целевая аудитория").pack(anchor="w")  # Подпись.
-        self.cb_audience = ttk.Combobox(left, values=AUDIENCES,  # Выпадающий список ЦА.
-                                        state="readonly", width=45)  # Только выбор.
-        self.cb_audience.set(AUDIENCES[0])                 # По умолчанию — первый сегмент.
-        self.cb_audience.pack(anchor="w", pady=(0, 6))     # Упаковка.
+        self._field_label(inner, "Описание предложения")
+        self.f_desc = RoundedField(inner, "text", height=64)
+        self.f_desc.pack(fill="x", pady=(0, 6))
+        self.t_desc = self.f_desc.widget
 
-        ttk.Label(left, text="Своя аудитория (если выбрано «Своя аудитория»)").pack(anchor="w")  # Подпись.
-        self.e_audience_custom = ttk.Entry(left, width=48) # Поле своей аудитории.
-        self.e_audience_custom.pack(anchor="w", pady=(0, 6))  # Упаковка.
+        self._field_label(inner, "Преимущества (по одному в строке)")
+        self.f_benefits = RoundedField(inner, "text", height=64)
+        self.f_benefits.pack(fill="x", pady=(0, 6))
+        self.t_benefits = self.f_benefits.widget
 
-        ttk.Label(left, text="Тон и стиль").pack(anchor="w")  # Подпись.
-        self.cb_tone = ttk.Combobox(left, values=TONES_LIST,  # Выпадающий список тонов.
-                                    state="readonly", width=45)  # Только выбор.
-        self.cb_tone.set(TONES_LIST[0])                    # По умолчанию — первый тон.
-        self.cb_tone.pack(anchor="w", pady=(0, 12))        # Упаковка, увеличенный отступ снизу.
+        row1 = tk.Frame(inner, bg="#FFFFFF")
+        row1.pack(fill="x")
+        col1 = tk.Frame(row1, bg="#FFFFFF")
+        col1.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        col2 = tk.Frame(row1, bg="#FFFFFF")
+        col2.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        self._field_label(col1, "Цена / оффер")
+        self.f_price = RoundedField(col1, "entry", height=32)
+        self.f_price.pack(fill="x", pady=(0, 6))
+        self.e_price = self.f_price.widget
+        self._field_label(col2, "Площадка")
+        self.f_platform = RoundedField(col2, "combo", height=32)
+        self.f_platform.pack(fill="x", pady=(0, 6))
+        self.cb_platform = self.f_platform.widget
+        self.cb_platform.configure(values=guide.PLATFORMS)
+        self.cb_platform.set(guide.PLATFORMS[0])
 
-        btns = ttk.Frame(left)                             # Контейнер для кнопок.
-        btns.pack(anchor="w", pady=(4, 0))                 # Упаковка.
-        ttk.Button(btns, text="⚡ Сгенерировать 3 варианта",  # Кнопка генерации.
-                   command=self.generate_all).pack(side="left")  # Привязка к методу.
-        ttk.Button(btns, text="Очистить",                  # Кнопка очистки.
-                   command=self.clear_all).pack(side="left", padx=8)  # Привязка к методу.
-        ttk.Button(btns, text="🔌 Тест ИИ",                # Кнопка проверки подключения к API.
-                   command=self.test_ai).pack(side="left")  # Привязка к методу.
+        row2 = tk.Frame(inner, bg="#FFFFFF")
+        row2.pack(fill="x")
+        col3 = tk.Frame(row2, bg="#FFFFFF")
+        col3.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        col4 = tk.Frame(row2, bg="#FFFFFF")
+        col4.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        self._field_label(col3, "Целевая аудитория")
+        self.f_audience = RoundedField(col3, "combo", height=32)
+        self.f_audience.pack(fill="x", pady=(0, 6))
+        self.cb_audience = self.f_audience.widget
+        self.cb_audience.configure(values=guide.AUDIENCES)
+        self.cb_audience.set(guide.AUDIENCES[0])
+        self._field_label(col4, "Тональность")
+        self.f_tone = RoundedField(col4, "combo", height=32)
+        self.f_tone.pack(fill="x", pady=(0, 6))
+        self.cb_tone = self.f_tone.widget
+        self.cb_tone.configure(values=guide.TONES_LIST)
+        self.cb_tone.set(guide.TONES_LIST[0])
 
-        # ---------- правая часть ----------
-        ttk.Label(right, text="Сгенерированные варианты",  # Заголовок правой части.
-                  font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(0, 8))  # Жирный.
+        self._field_label(inner, "Своя аудитория (необязательно)")
+        self.f_audience_custom = RoundedField(inner, "entry", height=32)
+        self.f_audience_custom.pack(fill="x", pady=(0, 2))
+        self.e_audience_custom = self.f_audience_custom.widget
 
-        for i in range(3):                                 # Цикл по трём вариантам.
-            frame = ttk.LabelFrame(right, text=f"Вариант {i + 1}", padding=8)  # Рамка с заголовком.
-            frame.pack(fill="both", expand=True, pady=4)   # Растягиваем.
+        tk.Label(right, text="Сгенерированные тексты", bg="#FFFFFF", fg="#0F2942",
+                 font=("Segoe UI", 13, "bold")).pack(anchor="w")
+        tk.Label(right, text="Редактируйте текст во вкладке, затем проверьте или скопируйте вариант.",
+                 bg="#FFFFFF", fg="#3B5978", font=("Segoe UI", 9)).pack(anchor="w", pady=(3, 10))
+        notebook = ttk.Notebook(right, style="Card.TNotebook")
+        notebook.pack(fill="both", expand=True)
+        self.variant_fields = []
+        for i in range(3):
+            tab = tk.Frame(notebook, bg="#FFFFFF", padx=10, pady=10)
+            notebook.add(tab, text=f"✨ Вариант #{i + 1}")
+            lbl = tk.Label(tab, text="0 / 0 символов", bg="#FFFFFF", fg="#3B5978",
+                           font=("Segoe UI", 9))
+            lbl.pack(anchor="e")
+            self.variant_lengths.append(lbl)
+            field = RoundedField(tab, "text", height=300)
+            field.pack(fill="both", expand=True, pady=(5, 10))
+            self.variant_fields.append(field)
+            self.variant_texts.append(field.widget)
+            row = tk.Frame(tab, bg="#FFFFFF")
+            row.pack(fill="x")
+            RoundedButton(row, "🔄 Перегенерировать", lambda idx=i: self.regenerate(idx),
+                          width=170, height=32).pack(side="left")
+            RoundedButton(row, "📋 Копировать", lambda idx=i: self.copy_variant(idx),
+                          width=150, height=32, bg="#FFFFFF", fg="#0369A1",
+                          border="#B8D4F0", hover="#EAF6FF",
+                          hover_border="#7DD3FC").pack(side="left", padx=6)
+            RoundedButton(row, "✅ Проверить", lambda idx=i: self.check_variant(idx),
+                          width=140, height=32, bg="#FFFFFF", fg="#0369A1",
+                          border="#B8D4F0", hover="#EAF6FF",
+                          hover_border="#7DD3FC").pack(side="left")
 
-            header = ttk.Frame(frame)                      # Верхняя строка рамки.
-            header.pack(fill="x")                          # Растягиваем по ширине.
-            lbl = ttk.Label(header, text="0 / 0 символов") # Метка длины.
-            lbl.pack(side="right")                         # Прижимаем вправо.
-            self.variant_lengths.append(lbl)               # Запоминаем метку.
-
-            txt = tk.Text(frame, height=7, wrap="word",    # Поле вывода текста варианта.
-                          font=("Segoe UI", 10))           # Шрифт.
-            txt.pack(fill="both", expand=True, pady=(4, 0))# Растягиваем.
-            txt.configure(state="disabled")                # Запрещаем пользователю печатать.
-            self.variant_texts.append(txt)                 # Запоминаем виджет.
-
-            row = ttk.Frame(frame)                         # Нижняя строка с кнопками.
-            row.pack(fill="x", pady=(6, 0))                # Упаковка.
-            ttk.Button(row, text="🔄 Перегенерировать",    # Кнопка перегенерации.
-                       command=lambda idx=i: self.regenerate(idx)).pack(side="left")  # Привязка с замыканием idx.
-            ttk.Button(row, text="📋 Копировать",          # Кнопка копирования.
-                       command=lambda idx=i: self.copy_variant(idx)).pack(side="left", padx=6)  # Привязка.
-            ttk.Button(row, text="✅ Проверить",           # Кнопка проверки.
-                       command=lambda idx=i: self.check_variant(idx)).pack(side="left")  # Привязка.
+    def _field_label(self, parent, text):
+        tk.Label(parent, text=text, bg="#FFFFFF", fg="#0F2942",
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 2))
 
     # ---------- сбор данных ----------
     def collect_data(self):                                # Собирает введённые данные в словарь.
@@ -519,7 +611,7 @@ class AdAssistantApp:                                      # Класс прил
 
     def regenerate(self, index):                           # Перегенерирует один вариант.
         if not self.data:                                  # Если данные ещё не собраны…
-            messagebox.showinfo("Подсказка", "Сначала нажмите «Сгенерировать 3 варианта».")  # Подсказка.
+            messagebox.showinfo("Подсказка", "Сначала нажмите «Сгенерировать».")  # Подсказка.
             return                                         # Выход.
         text, source = generate_text_with_source(self.data)  # Новый текст и его источник.
         self.variants[index] = text                        # Запоминаем текст.
@@ -536,7 +628,7 @@ class AdAssistantApp:                                      # Класс прил
         widget.insert("1.0", text)                         # Вставляем новый текст.
         widget.configure(state="disabled")                 # Снова блокируем редактирование.
 
-        limit = PLATFORM_LIMITS.get(self.data["platform"], (0, 0))[1]  # Лимит символов под площадку.
+        limit = guide.PLATFORM_LIMITS.get(self.data["platform"], (0, 0))[1]  # Лимит символов под площадку.
         source = self.variant_source[index]                # Источник текста («ИИ» или «шаблон»).
         suffix = f" · {source}" if source else ""          # Добавка к метке длины.
         self.variant_lengths[index].configure(             # Обновляем метку длины.
@@ -557,15 +649,17 @@ class AdAssistantApp:                                      # Класс прил
         if not text:                                       # Если пусто…
             messagebox.showinfo("Подсказка", "Сначала сгенерируйте текст.")  # Подсказка.
             return                                         # Выход.
-        issues = validate_text(text, self.data["platform"])# Получаем список замечаний.
-        if issues:                                         # Если замечания есть…
-            messagebox.showwarning(                        # …показываем окно с предупреждениями.
-                f"Проверка варианта {index + 1}",          # Заголовок.
-                "Найдены замечания:\n\n" + "\n".join("• " + s for s in issues))  # Текст.
-        else:                                              # Иначе…
-            messagebox.showinfo(                           # …показываем «всё ок».
-                f"Проверка варианта {index + 1}",          # Заголовок.
-                "Текст соответствует базовым требованиям:\n"  # Сообщение.
+        max_length = guide.PLATFORM_LIMITS.get(self.data["platform"], (0, 5000))[1]
+        result = text_validator.validate_text(text, max_length=max_length)
+        messages = result["errors"] + result["warnings"]
+        if messages:
+            messagebox.showwarning(
+                f"Проверка варианта {index + 1}",
+                "Найдены замечания:\n\n" + "\n".join("• " + s for s in messages))
+        else:
+            messagebox.showinfo(
+                f"Проверка варианта {index + 1}",
+                "Текст соответствует базовым требованиям:\n"
                 "• длина в норме\n• есть призыв к действию\n"
                 "• запрещённых формулировок не найдено")
 
