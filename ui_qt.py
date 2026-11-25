@@ -51,7 +51,15 @@ class Window(QMainWindow):
     def update_length(self,i):
         if self.data:self.lengths[i].setText(f"{len(self.editors[i].toPlainText())} / {guide.PLATFORM_LIMITS[self.data['platform']][1]} символов · {self.sources[i]}")
     def regenerate(self,i):
-        if self.data:t,s=logic.generate_text_with_source(self.data); self.sources[i]=s; self.editors[i].setPlainText(t); self.update_length(i)
+        if not self.data:return
+        limit=guide.PLATFORM_LIMITS[self.data['platform']][1]
+        t,r,n=text_validator.validate_and_rewrite(self.editors[i].toPlainText(),limit,logic.rewrite_with_ai)
+        self.sources[i]='ИИ'; self.editors[i].setPlainText(t); self.update_length(i)
+        m=r['errors']
+        (QMessageBox.warning if m else QMessageBox.information)(
+            self,'Перегенерация',
+            ('После '+str(n)+' попыток остались ошибки:\n\n'+'\n'.join(m))
+            if m else ('Исправлено за '+str(n)+' попыток.'))
     def copy(self,i): QApplication.clipboard().setText(self.editors[i].toPlainText())
     def check(self,i):
         if not self.data:return

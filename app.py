@@ -79,6 +79,16 @@ def ai_ping():                                             # Короткий з
     return str(reply).strip()[:60] or "ok"                 # Возвращаем короткий ответ модели.
 
 
+def rewrite_with_ai(prompt):                               # Переделка текста через уже подключённый API.
+    raw = ai_request(                                      # Без JSON-режима: нужен обычный текст.
+        [{"role": "user", "content": prompt}],             # Инструкция от build_rewrite_request().
+        temperature=0.8,                                   # Меньше «творчества», чем при генерации.
+        max_tokens=1500,                                   # Лимит ответа.
+        json_mode=False,                                   # Возвращаем чистый текст, не JSON.
+    )
+    return str(raw).strip()                                # Убираем лишние пробелы по краям.
+
+
 def ai_parse_json(raw):                                    # Достаём JSON из ответа модели.
     raw = (raw or "").strip()                              # Убираем пробелы по краям.
     start, end = raw.find("{"), raw.rfind("}")             # Ищем границы объекта.
@@ -613,13 +623,27 @@ class AdAssistantApp:                                      # Класс прил
         if not self.data:                                  # Если данные ещё не собраны…
             messagebox.showinfo("Подсказка", "Сначала нажмите «Сгенерировать».")  # Подсказка.
             return                                         # Выход.
-        text, source = generate_text_with_source(self.data)  # Новый текст и его источник.
+
+        limit = guide.PLATFORM_LIMITS.get(self.data["platform"], (0, 5000))[1]  # Лимит площадки.
+        text, result, attempts = text_validator.validate_and_rewrite(          # До 3 попыток.
+            self.variants[index], limit, rewrite_with_ai)
+
         self.variants[index] = text                        # Запоминаем текст.
-        self.variant_source[index] = source                # Запоминаем источник.
+        self.variant_source[index] = "ИИ"                  # Источник — ИИ.
         self.set_variant_text(index, text)                 # Обновляем UI.
         self.lbl_ai.configure(                             # Обновляем индикатор режима.
-            text=f"Последняя генерация: {source}",
-            fg="#0a7d28" if source == "ИИ" else "#b06a00")
+            text=f"Последняя перегенерация: ИИ · попыток {attempts}",
+            fg="#0a7d28" if not result["errors"] else "#b06a00")
+
+        if result["errors"]:                               # Если за 3 попытки не исправилось…
+            messagebox.showwarning(                         # …показываем остаток.
+                f"Вариант {index + 1}",
+                f"После {attempts} попыток остались ошибки:\n\n"
+                + "\n".join("• " + e for e in result["errors"]))
+        else:                                              # Если исправилось…
+            messagebox.showinfo(                           # …сообщаем, сколько попыток ушло.
+                f"Вариант {index + 1}",
+                f"Запрещённые формулировки убраны за {attempts} попыток.")
 
     def set_variant_text(self, index, text):               # Выводит текст в нужный виджет.
         widget = self.variant_texts[index]                 # Берём виджет по индексу.

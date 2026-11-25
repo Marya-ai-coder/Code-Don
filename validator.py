@@ -161,7 +161,6 @@ def build_rewrite_request(
     max_attempts=DEFAULT_MAX_ATTEMPTS,
 ):
     errors = validation_result.get("errors", [])
-    review_phrases = validation_result.get("review_phrases", [])
     max_length = validation_result.get("max_length", 200)
 
     instructions = [
@@ -170,9 +169,6 @@ def build_rewrite_request(
         "Сохрани целевую аудиторию, площадку, тональность и преимущества.",
         "Сохрани или добавь понятный призыв к действию.",
         "Удали запрещённые формулировки.",
-        "Не используй спорные фразы: "
-        + (", ".join(review_phrases) if review_phrases else "нет")
-        + ".",
         f"Длина нового текста должна быть не больше {max_length} символов.",
         "Верни только готовый рекламный текст без объяснений.",
     ]
@@ -191,6 +187,34 @@ def build_rewrite_request(
         + "\n\nИнструкция:\n- "
         + "\n- ".join(instructions)
     )
+
+
+def validate_and_rewrite(text, max_length, rewrite_fn, max_attempts=DEFAULT_MAX_ATTEMPTS):
+    """Проверяет текст и переделывает его через переданную функцию rewrite_fn.
+
+    rewrite_fn(prompt) -> новый текст. Валидатор сам не знает про API,
+    поэтому его можно использовать и с ИИ, и с шаблонами, и в тестах.
+    """
+    for attempt in range(1, max_attempts + 1):
+        result = validate_text(
+            text,
+            max_length=max_length,
+            attempt=attempt,
+            max_attempts=max_attempts,
+        )
+
+        if not result["errors"]:                  # Серьёзных ошибок нет — готово.
+            return text, result, attempt
+
+        if attempt == max_attempts:               # Три попытки закончились.
+            break
+
+        prompt = build_rewrite_request(
+            text, result, attempt + 1, max_attempts
+        )
+        text = rewrite_fn(prompt)                 # Переделываем через ИИ.
+
+    return text, result, attempt
 
 
 def print_result(result):
